@@ -1,0 +1,58 @@
+diff --git a/src/document_core/queries/rendering.rs b/src/document_core/queries/rendering.rs
+index 55013e63e..04135b2cb 100644
+--- a/src/document_core/queries/rendering.rs
++++ b/src/document_core/queries/rendering.rs
+@@ -289,7 +289,10 @@ pub(crate) fn paragraph_text_with_equations(para: &Paragraph) -> String {
+             if !output.is_empty() && !output.chars().last().is_some_and(char::is_whitespace) {
+                 output.push(' ');
+             }
++            // [hwp2pdf] 수식 스크립트를 U+FFF9…U+FFFB 로 감싸 앱이 LaTeX 로 바꿀 수 있게 한다.
++            output.push('\u{FFF9}');
+             output.push_str(script);
++            output.push('\u{FFFB}');
+             if position < text.len() && !text[position].is_whitespace() {
+                 output.push(' ');
+             }
+@@ -7425,7 +7428,10 @@ impl DocumentCore {
+                 RenderNodeType::Equation(eq) => {
+                     let script = eq.script.trim();
+                     if !script.is_empty() {
++                        // [hwp2pdf] 수식 표식 — 앱이 LaTeX 로 바꾼다.
++                        out.push('\u{FFF9}');
+                         out.push_str(script);
++                        out.push('\u{FFFB}');
+                         *has_token = true;
+                     }
+                 }
+@@ -7523,7 +7529,10 @@ impl DocumentCore {
+                 RenderNodeType::Equation(eq) => {
+                     let script = eq.script.trim();
+                     if !script.is_empty() {
++                        // [hwp2pdf] 수식 표식 — 앱이 LaTeX 로 바꾼다.
++                        out.push('\u{FFF9}');
+                         out.push_str(script);
++                        out.push('\u{FFFB}');
+                         *has_token = true;
+                     }
+                 }
+diff --git a/src/renderer/svg.rs b/src/renderer/svg.rs
+index 3e52ea010..d60d5889b 100644
+--- a/src/renderer/svg.rs
++++ b/src/renderer/svg.rs
+@@ -3125,6 +3125,16 @@ impl Renderer for SvgRenderer {
+         // 원본 텍스트 렌더링
+         for (char_idx, cluster_str) in clusters.iter() {
+             if cluster_str == " " || cluster_str == "\t" {
++                // [hwp2pdf] 공백도 글리프로 내보낸다 — PDF 텍스트 추출기가 글자 간격으로
++                // 띄어쓰기를 추측하지 않고 실제 U+0020 을 읽게 한다. usvg 는 잉크가 없는
++                // (bbox 가 빈) text 노드를 버리므로 투명한 밑줄로 bbox 를 만들어 살린다.
++                // fill-opacity=0 이라 화면에는 아무것도 그려지지 않는다.
++                self.output.push_str(&format!(
++                    "<text x=\"{}\" y=\"{}\" xml:space=\"preserve\" {} fill-opacity=\"0\" text-decoration=\"underline\"> </text>\n",
++                    x + char_positions[*char_idx],
++                    y,
++                    attrs_for_cluster(" ", &color),
++                ));
+                 continue;
+             }
+             // [#6127] 한컴 사각 안 숫자(U+F02B1~F02C4) 평문 폴백 — web_canvas

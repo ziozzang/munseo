@@ -1,0 +1,61 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macos-arm64
+          - os: windows-latest
+            name: windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Fetch rhwp (sparse, pinned) and apply patches
+        shell: bash
+        run: ./scripts/fetch-rhwp.sh
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --release
+
+      - name: Build (macOS app bundle)
+        if: runner.os == 'macOS'
+        run: |
+          ./scripts/bundle-macos.sh
+          cd dist && ditto -c -k --keepParent HWP2PDF.app HWP2PDF-macos.zip
+
+      - name: Build (Windows exe)
+        if: runner.os == 'Windows'
+        run: cargo build --release
+
+      - name: Smoke test (CLI conversion)
+        shell: bash
+        run: |
+          BIN=target/release/hwp2pdf
+          [ -f "$BIN.exe" ] && BIN="$BIN.exe"
+          mkdir -p smoke
+          cp third_party/rhwp/saved/111exam_social.hwp smoke/ 2>/dev/null || true
+          ls smoke/*.hwp >/dev/null 2>&1 || { echo "no sample; skip"; exit 0; }
+          for f in pdfa docx md txt html; do "$BIN" --format $f smoke; done
+          ls -la smoke
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hwp2pdf-${{ matrix.name }}
+          path: |
+            dist/HWP2PDF-macos.zip
+            target/release/hwp2pdf.exe
+          if-no-files-found: ignore

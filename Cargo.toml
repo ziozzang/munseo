@@ -1,0 +1,44 @@
+[package]
+name = "hwp2pdf"
+version = "0.1.0"
+edition = "2021"
+description = "HWP/HWPX → PDF/A · Markdown · Text 드래그앤드롭 변환기 (rhwp 기반)"
+license = "MIT"
+
+build = "build.rs"
+
+[[bin]]
+name = "hwp2pdf"
+path = "src/main.rs"
+
+[dependencies]
+rhwp = { path = "third_party/rhwp", default-features = false }
+eframe = { version = "0.35", default-features = false, features = ["default_fonts", "glow", "persistence"] }
+lopdf = "0.45"
+walkdir = "2.5"
+trash = "5.2"
+rfd = "0.17"
+time = { version = "0.3", features = ["local-offset", "formatting"] }
+md5 = "0.8"
+zip = { version = "8.5", default-features = false, features = ["deflate"] }
+serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+[workspace]
+exclude = ["third_party"]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = "debuginfo"
+
+# rhwp 가 의존하는 svg2pdf 결정화 포크 — 의존 크레이트의 [patch] 는 전파되지 않으므로 여기서 다시 건다.
+[patch.crates-io]
+svg2pdf = { git = "https://github.com/edwardkim/svg2pdf", branch = "determinism-0.13" }
+
+[package.metadata.bundle]
+name = "HWP2PDF"
+identifier = "net.jioh.hwp2pdf"
