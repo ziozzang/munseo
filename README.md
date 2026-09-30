@@ -29,6 +29,9 @@ irm https://raw.githubusercontent.com/ziozzang/munseo/main/install.ps1 | iex
 
 ## 기능
 
+- **연결 프로그램 등록**: Finder "다음으로 열기"(macOS)와 탐색기 "연결 프로그램" 목록에 나옵니다.
+  Windows에서는 우클릭 메뉴에 "HWP2PDF로 변환"도 생깁니다(`install.ps1`로 설치한 경우).
+  한컴오피스 같은 기본 앱은 바꾸지 않습니다.
 - **드래그앤드롭**: 파일을 놓으면 그 파일을, 폴더를 놓으면 하위 폴더까지 모든 `.hwp`/`.hwpx`를 변환합니다.
   숨김 파일과 한글 잠금 파일(`~$…`)은 건너뜁니다. "파일 선택…" / "폴더 선택…" 버튼으로도 고를 수 있습니다.
 - **출력 포맷(드롭다운)**
@@ -127,13 +130,13 @@ Windows에서 같은 명령으로 빌드합니다(`scripts/fetch-rhwp.sh`는 Git
 
 ### GitHub Actions
 
-`.github/workflows/build.yml`이 푸시할 때마다 macOS와 Windows(x64)에서 테스트·빌드·변환 스모크 테스트를 합니다.
+`.github/workflows/build.yml`이 브랜치에 푸시할 때마다 macOS와 Windows(x64)에서 테스트·빌드·변환 스모크 테스트를 합니다.
 macOS는 arm64 + x86_64 유니버설로 빌드합니다. 결과물은 다음 이름으로 올립니다.
 
 - `HWP2PDF_<버전>_macos_universal.zip`
 - `HWP2PDF_<버전>_windows_x86_64.exe`
 
-`v*` 태그를 푸시하면 이 두 파일과 `SHA256SUMS`로 GitHub 릴리스를 만듭니다.
+CI는 빌드와 테스트 확인용입니다. 릴리스는 아래 "릴리스 절차"대로 로컬에서 만듭니다.
 
 ## 자동 업데이트
 
@@ -158,10 +161,17 @@ macOS는 arm64 + x86_64 유니버설로 빌드합니다. 결과물은 다음 이
 
 ## 릴리스 절차
 
-1. `Cargo.toml`의 `version`과 `RELEASE_NOTES.md`를 고칩니다.
-2. `cargo build`로 `Cargo.lock`을 갱신한 뒤 커밋합니다.
-3. `./scripts/release.sh`를 실행합니다. `v<버전>` 태그를 푸시하고, Actions가 릴리스를 만듭니다.
-   - 태그와 `Cargo.toml` 버전이 다르면 릴리스 단계가 실패합니다.
+릴리스 파일은 CI 없이 이 Mac에서 직접 빌드해 올립니다.
+macOS는 유니버설로, Windows는 mingw로 크로스 빌드합니다.
+
+```sh
+brew install rustup mingw-w64     # 처음 한 번
+rustup target add aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-gnu
+```
+
+1. `Cargo.toml`의 `version`과 `RELEASE_NOTES.md`를 고치고 커밋합니다.
+2. `./scripts/release.sh`를 실행합니다. `out/`에 두 파일과 `SHA256SUMS`를 만들고 검증합니다.
+3. `./scripts/release.sh --publish`를 실행합니다(`$GITHUB_TOKEN` 필요). `v<버전>` 태그를 푸시하고 릴리스를 만들어 파일을 올립니다.
 
 ## 명령줄 사용
 
@@ -199,7 +209,7 @@ build.rs         Windows 실행 파일 아이콘
 patches/         rhwp 패치 (공백 글리프, 텍스트 추출 시 수식 표식)
 install.sh       macOS 한 줄 설치 스크립트
 install.ps1      Windows 한 줄 설치 스크립트
-scripts/release.sh  버전 태그 푸시 (릴리스는 Actions 가 만듦)
+scripts/release.sh  로컬 릴리스 빌드(macOS 유니버설 + Windows 크로스)와 업로드
 ```
 
 ## 라이선스

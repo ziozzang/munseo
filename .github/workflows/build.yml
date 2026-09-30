@@ -1,9 +1,9 @@
 name: build
 
+# 빌드·테스트 확인용. 릴리스는 CI 를 쓰지 않고 scripts/release.sh 로 로컬에서 만든다.
 on:
   push:
     branches: ["**"]
-    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -74,39 +74,3 @@ jobs:
           name: hwp2pdf-${{ matrix.name }}
           path: out/*
           if-no-files-found: error
-
-  # v* 태그: 두 플랫폼 결과물 + SHA256SUMS 로 GitHub 릴리스를 만든다 (앱의 자동 업데이트가 이것을 읽음).
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Tag must match Cargo.toml version
-        run: |
-          ver=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
-          [ "v$ver" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != Cargo.toml v$ver"; exit 1; }
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: out
-          merge-multiple: true
-
-      - name: Checksums
-        run: |
-          cd out
-          sha256sum HWP2PDF_* > SHA256SUMS
-          cat SHA256SUMS
-          sha256sum -c SHA256SUMS
-
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          notes=(--generate-notes)
-          [ -f RELEASE_NOTES.md ] && notes=(--notes-file RELEASE_NOTES.md)
-          gh release create "$GITHUB_REF_NAME" out/HWP2PDF_* out/SHA256SUMS \
-            --repo "$GITHUB_REPOSITORY" --title "HWP2PDF $GITHUB_REF_NAME" "${notes[@]}"

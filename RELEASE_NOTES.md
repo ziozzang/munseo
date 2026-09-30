@@ -1,9 +1,13 @@
-HWP2PDF의 첫 공개 릴리스입니다.
+HWP2PDF 0.1.1
 
-- HWP/HWPX를 끌어다 놓으면 PDF/A-2u, PDF, Word(DOCX), Markdown, Text, HTML로 변환합니다. 폴더는 하위 폴더까지 변환합니다.
-- 동시에 최대 4개 파일을 변환하고, 전체와 파일별 진행률을 보여 줍니다. 원본을 휴지통으로 옮기는 옵션이 있습니다.
-- GitHub Releases 자동 업데이트를 지원합니다(SHA256SUMS 검증, macOS·Windows).
+- **연결 프로그램 등록**
+  - macOS: Finder "다음으로 열기" 목록에 HWP2PDF가 나오고, Dock 아이콘에 파일을 놓아도 변환합니다.
+  - Windows: `install.ps1`로 설치하면 "연결 프로그램" 목록과 우클릭 메뉴 "HWP2PDF로 변환"이 등록됩니다. 기본 앱은 바꾸지 않습니다.
+- **수정**: 진행 목록에서 한글 파일 이름이 네모로 보이던 문제. macOS의 자모 분리형(NFD) 이름을 음절로 합쳐 표시합니다.
+- **수정**: Windows 실행 파일에 아이콘이 들어갑니다.
 
 설치 (경고 없이):
 - macOS: `curl -fsSL https://raw.githubusercontent.com/ziozzang/munseo/main/install.sh | sh`
 - Windows: `irm https://raw.githubusercontent.com/ziozzang/munseo/main/install.ps1 | iex`
+
+0.1.0을 쓰고 있다면 앱이 알아서 업데이트를 알려 줍니다.

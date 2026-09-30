@@ -1,5 +1,7 @@
 target/
+target-win/
 third_party/
 dist/
+out/
 *.part
 .DS_Store

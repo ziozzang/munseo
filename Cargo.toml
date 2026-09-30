@@ -1,6 +1,6 @@
 [package]
 name = "hwp2pdf"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "HWP/HWPX → PDF/A · Markdown · Text 드래그앤드롭 변환기 (rhwp 기반)"
 license = "MIT"
