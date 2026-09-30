@@ -1,6 +1,6 @@
 [package]
-name = "hwp2pdf"
-version = "0.1.2"
+name = "munseo"
+version = "0.2.0"
 edition = "2021"
 description = "HWP/HWPX → PDF/A · Markdown · Text 드래그앤드롭 변환기 (rhwp 기반)"
 license = "MIT"
@@ -8,7 +8,7 @@ license = "MIT"
 build = "build.rs"
 
 [[bin]]
-name = "hwp2pdf"
+name = "munseo"
 path = "src/main.rs"
 
 [dependencies]
@@ -48,5 +48,6 @@ strip = "debuginfo"
 svg2pdf = { git = "https://github.com/edwardkim/svg2pdf", branch = "determinism-0.13" }
 
 [package.metadata.bundle]
-name = "HWP2PDF"
+name = "Munseo"
+# 0.1.x (HWP2PDF) 의 자동 업데이트가 번들 ID 를 확인하므로 예전 ID 를 유지한다.
 identifier = "net.jioh.hwp2pdf"

@@ -49,9 +49,9 @@ fn main() -> ExitCode {
 
 fn print_usage() {
     eprintln!(
-        "사용법: hwp2pdf [--format pdfa|pdf|docx|md|txt|html] [--delete-original] <파일|폴더>...\n\
-         \x20      hwp2pdf update [--check]   GitHub 릴리스로 업데이트 (--check: 확인만)\n\
-         \x20      hwp2pdf --gui <파일>...    창을 열고 파일을 목록에 넣음\n\
+        "사용법: munseo [--format pdfa|pdf|docx|md|txt|html] [--delete-original] <파일|폴더>...\n\
+         \x20      munseo update [--check]    GitHub 릴리스로 업데이트 (--check: 확인만)\n\
+         \x20      munseo --gui <파일>...       창을 열고 파일을 목록에 넣음\n\
          인자 없이 실행하면 드래그앤드롭 창이 열립니다.\n\
          --format            출력 포맷 (기본값: pdfa = PDF/A-2u)\n\
          --delete-original   변환에 성공한 원본 HWP 를 휴지통으로 옮김"
@@ -70,7 +70,7 @@ fn run_cli(args: &[String]) -> ExitCode {
                 return ExitCode::SUCCESS;
             }
             "-V" | "--version" => {
-                println!("hwp2pdf {}", update::CURRENT_VERSION);
+                println!("munseo {}", update::CURRENT_VERSION);
                 return ExitCode::SUCCESS;
             }
             "-f" | "--format" => {

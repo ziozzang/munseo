@@ -1,9 +1,9 @@
 //! GitHub Releases 자동 업데이트 (ziozzang/sugyeol 방식).
 //!
 //! 최신 릴리스 조회 → 버전 비교 → 플랫폼 에셋 다운로드 → SHA256SUMS 검증 → 교체 → 다시 실행.
-//! - macOS: `HWP2PDF_<ver>_macos_universal.zip` 을 풀어 `.app` 번들을 통째로 바꾼다.
+//! - macOS: `Munseo_<ver>_macos_universal.zip` 을 풀어 `.app` 번들을 통째로 바꾼다.
 //!   앱이 끝난 뒤 셸 스크립트가 번들을 바꾸고 다시 연다.
-//! - Windows: `HWP2PDF_<ver>_windows_x86_64.exe` 를 받아, 실행 중인 exe 를 `.old` 로 이름을 바꾸고
+//! - Windows: `Munseo_<ver>_windows_x86_64.exe` 를 받아, 실행 중인 exe 를 `.old` 로 이름을 바꾸고
 //!   (Windows 는 실행 중인 파일의 이름 변경을 허용) 새 exe 를 그 자리에 둔 뒤 실행한다.
 
 use std::cmp::Ordering;
@@ -18,7 +18,8 @@ use sha2::{Digest, Sha256};
 pub const REPOSITORY: &str = "ziozzang/munseo";
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 3600);
-const USER_AGENT: &str = "hwp2pdf-selfupdate";
+const USER_AGENT: &str = "munseo-selfupdate";
+/// 0.1.x (HWP2PDF) 의 업데이트가 이 ID 를 확인하므로 이름을 바꾼 뒤에도 유지한다.
 #[cfg(target_os = "macos")]
 const BUNDLE_ID: &str = "net.jioh.hwp2pdf";
 
@@ -63,8 +64,8 @@ fn agent(timeout: Option<Duration>) -> ureq::Agent {
 }
 
 pub fn fetch_latest() -> Result<Release, String> {
-    // HWP2PDF_UPDATE_API 로 테스트 서버를 가리킬 수 있다.
-    let api = std::env::var("HWP2PDF_UPDATE_API").unwrap_or_else(|_| "https://api.github.com".into());
+    // MUNSEO_UPDATE_API 로 테스트 서버를 가리킬 수 있다.
+    let api = std::env::var("MUNSEO_UPDATE_API").unwrap_or_else(|_| "https://api.github.com".into());
     let url = format!("{api}/repos/{REPOSITORY}/releases/latest");
     let mut resp = agent(Some(Duration::from_secs(15)))
         .get(&url)
@@ -95,9 +96,9 @@ pub fn compare_versions(a: &str, b: &str) -> Ordering {
 
 pub fn asset_name(version: &str) -> Option<String> {
     if cfg!(target_os = "macos") {
-        Some(format!("HWP2PDF_{version}_macos_universal.zip"))
+        Some(format!("Munseo_{version}_macos_universal.zip"))
     } else if cfg!(all(windows, target_arch = "x86_64")) {
-        Some(format!("HWP2PDF_{version}_windows_x86_64.exe"))
+        Some(format!("Munseo_{version}_windows_x86_64.exe"))
     } else {
         None
     }
@@ -133,7 +134,7 @@ fn state_path() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")));
-    base.map(|b| b.join("hwp2pdf").join("update-check.json"))
+    base.map(|b| b.join("munseo").join("update-check.json"))
 }
 
 fn load_state() -> CheckState {
@@ -161,7 +162,9 @@ fn now() -> u64 {
 
 /// 시작할 때 자동 확인을 할지: 끄는 환경 변수가 없고, 마지막 확인에서 하루가 지났을 때.
 pub fn automatic_check_due() -> bool {
-    if std::env::var_os("HWP2PDF_NO_UPDATE_CHECK").is_some() || asset_name(CURRENT_VERSION).is_none() {
+    if std::env::var_os("MUNSEO_NO_UPDATE_CHECK").is_some()
+        || std::env::var_os("HWP2PDF_NO_UPDATE_CHECK").is_some()
+        || asset_name(CURRENT_VERSION).is_none() {
         return false;
     }
     now().saturating_sub(load_state().checked_at) >= CHECK_INTERVAL.as_secs()
@@ -266,7 +269,7 @@ mod platform {
 
     pub fn install(release: &Release, asset: &Asset, expected: &str, relaunch: bool, progress: &dyn Fn(f32, String)) -> Result<(), String> {
         let exe = std::env::current_exe().and_then(|p| p.canonicalize()).map_err(|e| e.to_string())?;
-        // …/HWP2PDF.app/Contents/MacOS/hwp2pdf
+        // …/Munseo.app/Contents/MacOS/munseo
         let bundle = exe
             .ancestors()
             .nth(3)
@@ -276,7 +279,7 @@ mod platform {
         let parent = bundle.parent().ok_or("앱 위치를 알 수 없습니다.")?;
 
         // 앱과 같은 볼륨에 작업 폴더를 두어 마지막 이동이 이름 변경으로 끝나게 한다.
-        let work = parent.join(format!(".hwp2pdf-update-{}", std::process::id()));
+        let work = parent.join(format!(".munseo-update-{}", std::process::id()));
         let _ = fs::remove_dir_all(&work);
         fs::create_dir(&work).map_err(|_| format!("{} 폴더에 쓸 권한이 없어 업데이트할 수 없습니다.", parent.display()))?;
         let result = (|| {
@@ -316,15 +319,18 @@ mod platform {
     fn spawn_swap(target: &Path, new_app: &Path, work: &Path, relaunch: bool) -> Result<(), String> {
         let script = r#"
 while kill -0 "$PID" 2>/dev/null; do sleep 0.2; done
+DEST="$(dirname "$TARGET")/Munseo.app"
 rm -rf "$TARGET.old"
-if mv "$TARGET" "$TARGET.old" && mv "$NEW" "$TARGET"; then
+if mv "$TARGET" "$TARGET.old" && mv "$NEW" "$DEST"; then
   rm -rf "$TARGET.old"
 else
-  [ -e "$TARGET" ] || mv "$TARGET.old" "$TARGET"
+  [ -e "$DEST" ] || mv "$TARGET.old" "$TARGET"
+  DEST="$TARGET"
 fi
 rm -rf "$WORK"
-xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null
-[ "$RELAUNCH" = 1 ] && open "$TARGET"
+xattr -dr com.apple.quarantine "$DEST" 2>/dev/null
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST" 2>/dev/null
+[ "$RELAUNCH" = 1 ] && open "$DEST"
 exit 0
 "#;
         Command::new("/bin/sh")
@@ -390,7 +396,7 @@ pub fn cleanup_previous() {
 
 // MARK: 명령줄
 
-/// `hwp2pdf update [--check]`
+/// `munseo update [--check]`
 pub fn run_cli(check_only: bool) -> std::process::ExitCode {
     use std::process::ExitCode;
     let release = match fetch_latest() {
@@ -407,7 +413,7 @@ pub fn run_cli(check_only: bool) -> std::process::ExitCode {
         return ExitCode::SUCCESS;
     }
     if check_only {
-        println!("새 버전이 있습니다. `hwp2pdf update` 로 업데이트하세요.");
+        println!("새 버전이 있습니다. `munseo update` 로 업데이트하세요.");
         return ExitCode::SUCCESS;
     }
     // 단계가 바뀔 때와 10% 단위로만 출력한다.
@@ -448,9 +454,63 @@ mod tests {
     #[test]
     fn checksums() {
         let h = "a".repeat(64);
-        let sums = parse_checksums(&format!("{h}  HWP2PDF_1.0.0_macos_universal.zip\nbad line\n{h} *x.exe\n"));
-        assert_eq!(sums.get("HWP2PDF_1.0.0_macos_universal.zip"), Some(&h));
+        let sums = parse_checksums(&format!("{h}  Munseo_1.0.0_macos_universal.zip\nbad line\n{h} *x.exe\n"));
+        assert_eq!(sums.get("Munseo_1.0.0_macos_universal.zip"), Some(&h));
         assert_eq!(sums.get("x.exe"), Some(&h));
         assert_eq!(sums.len(), 2);
+    }
+}
+
+/// HWP2PDF(0.1.x) 에서 Munseo 로 이름이 바뀌면서 남은 것들을 옮긴다. GUI 를 띄우기 전에 한 번 부른다.
+/// - 설정(eframe 저장소) 폴더 HWP2PDF → Munseo
+/// - 업데이트 확인 캐시 hwp2pdf → munseo
+/// - macOS: 0.1.x 의 업데이트로 바뀐 번들이 아직 HWP2PDF.app 이름이면 Munseo.app 으로 바꾼다
+pub fn migrate_from_hwp2pdf() {
+    if let (Some(old), Some(new)) = (eframe::storage_dir("HWP2PDF"), eframe::storage_dir("Munseo")) {
+        if old.exists() && !new.exists() {
+            let _ = fs::rename(&old, &new);
+        }
+    }
+    if let Some(new) = state_path().and_then(|p| p.parent().map(Path::to_path_buf)) {
+        let old = new.with_file_name("hwp2pdf");
+        if old.exists() && !new.exists() {
+            let _ = fs::rename(&old, &new);
+        }
+    }
+    #[cfg(target_os = "macos")]
+    rename_legacy_bundle();
+}
+
+#[cfg(target_os = "macos")]
+fn rename_legacy_bundle() {
+    let Ok(exe) = std::env::current_exe().and_then(|p| p.canonicalize()) else { return };
+    let Some(bundle) = exe.ancestors().nth(3) else { return };
+    if bundle.file_name().and_then(|n| n.to_str()) != Some("HWP2PDF.app") {
+        return;
+    }
+    let dest = bundle.with_file_name("Munseo.app");
+    let writable = bundle.parent().is_some_and(|p| fs::metadata(p).is_ok_and(|m| !m.permissions().readonly()));
+    if dest.exists() || !writable {
+        return;
+    }
+    // 실행 중인 번들의 이름을 바꾸면 AppKit 이 번들 정보를 읽다가 죽는다. 그래서 스크립트에 맡기고
+    // 바로 끝낸다: 이 프로세스가 끝나면 이름을 바꾸고 Munseo.app 으로 다시 연다.
+    let script = r#"
+while kill -0 "$PID" 2>/dev/null; do sleep 0.1; done
+mv "$OLD" "$NEW" || { open "$OLD"; exit 0; }
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$NEW" 2>/dev/null
+open "$NEW"
+"#;
+    let spawned = std::process::Command::new("/bin/sh")
+        .arg("-c")
+        .arg(script)
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+        .env("PID", std::process::id().to_string())
+        .env("OLD", bundle)
+        .env("NEW", &dest)
+        .spawn();
+    if spawned.is_ok() {
+        std::process::exit(0);
     }
 }

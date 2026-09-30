@@ -44,9 +44,9 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           UNIVERSAL=1 ./scripts/bundle-macos.sh
-          lipo -info dist/HWP2PDF.app/Contents/MacOS/hwp2pdf
+          lipo -info dist/Munseo.app/Contents/MacOS/munseo
           mkdir -p out
-          ditto -c -k --keepParent dist/HWP2PDF.app "out/HWP2PDF_${{ steps.ver.outputs.version }}_macos_universal.zip"
+          ditto -c -k --keepParent dist/Munseo.app "out/Munseo_${{ steps.ver.outputs.version }}_macos_universal.zip"
 
       - name: Build (Windows exe)
         if: runner.os == 'Windows'
@@ -54,13 +54,13 @@ jobs:
         run: |
           cargo build --release
           mkdir -p out
-          cp target/release/hwp2pdf.exe "out/HWP2PDF_${{ steps.ver.outputs.version }}_windows_x86_64.exe"
+          cp target/release/munseo.exe "out/Munseo_${{ steps.ver.outputs.version }}_windows_x86_64.exe"
 
       - name: Smoke test (CLI conversion)
         shell: bash
         run: |
-          BIN=target/release/hwp2pdf
-          [ -f dist/HWP2PDF.app/Contents/MacOS/hwp2pdf ] && BIN=dist/HWP2PDF.app/Contents/MacOS/hwp2pdf
+          BIN=target/release/munseo
+          [ -f dist/Munseo.app/Contents/MacOS/munseo ] && BIN=dist/Munseo.app/Contents/MacOS/munseo
           [ -f "$BIN.exe" ] && BIN="$BIN.exe"
           "$BIN" --version
           mkdir -p smoke
@@ -71,6 +71,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: hwp2pdf-${{ matrix.name }}
+          name: munseo-${{ matrix.name }}
           path: out/*
           if-no-files-found: error

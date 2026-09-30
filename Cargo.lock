@@ -1448,28 +1448,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
-name = "hwp2pdf"
-version = "0.1.2"
-dependencies = [
- "eframe",
- "lopdf",
- "md5",
- "objc2 0.6.4",
- "rfd",
- "rhwp",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "time",
- "trash",
- "unicode-normalization",
- "ureq",
- "walkdir",
- "winresource",
- "zip",
-]
-
-[[package]]
 name = "hybrid-array"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2010,6 +1988,28 @@ checksum = "bb85c154ba489f01b25c0d36ae69a87e4a1c73a72631fc6c0eb6dde34a73e44b"
 dependencies = [
  "num-traits",
  "pxfm",
+]
+
+[[package]]
+name = "munseo"
+version = "0.2.0"
+dependencies = [
+ "eframe",
+ "lopdf",
+ "md5",
+ "objc2 0.6.4",
+ "rfd",
+ "rhwp",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "time",
+ "trash",
+ "unicode-normalization",
+ "ureq",
+ "walkdir",
+ "winresource",
+ "zip",
 ]
 
 [[package]]

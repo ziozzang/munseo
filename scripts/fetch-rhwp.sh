@@ -40,7 +40,7 @@ PATTERNS
 git fetch --depth 1 origin "$RHWP_REV"
 git checkout -q -f "$RHWP_REV"
 
-# hwp2pdf 패치 적용 (이미 적용돼 있으면 건너뜀)
+# munseo 패치 적용 (이미 적용돼 있으면 건너뜀)
 for patch in "$ROOT"/patches/rhwp-*.patch; do
   [ -e "$patch" ] || continue
   if git apply --reverse --check "$patch" 2>/dev/null; then

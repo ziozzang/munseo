@@ -10,7 +10,7 @@ pub const NOTO_SANS_KR: &[u8] = include_bytes!("../assets/fonts/NotoSansKR-Regul
 pub fn pdf_font_paths() -> Vec<PathBuf> {
     static DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
     DIR.get_or_init(|| {
-        let dir = std::env::temp_dir().join(format!("hwp2pdf-fonts-{}", env!("CARGO_PKG_VERSION")));
+        let dir = std::env::temp_dir().join(format!("munseo-fonts-{}", env!("CARGO_PKG_VERSION")));
         let file = dir.join("NotoSansKR-Regular.ttf");
         let ok = file.metadata().map(|m| m.len() == NOTO_SANS_KR.len() as u64).unwrap_or(false)
             || (std::fs::create_dir_all(&dir).is_ok() && std::fs::write(&file, NOTO_SANS_KR).is_ok());

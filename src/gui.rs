@@ -28,8 +28,8 @@ pub fn run(initial: Vec<PathBuf>) -> eframe::Result<()> {
     };
     #[cfg(target_os = "macos")]
     crate::open_files::install();
-    // 앱 이름은 설정 저장 위치에도 쓰이므로 창 제목과 달리 "HWP2PDF" 를 유지한다.
-    eframe::run_native("HWP2PDF", options, Box::new(|cc| Ok(Box::new(App::new(cc, initial)))))
+    crate::update::migrate_from_hwp2pdf();
+    eframe::run_native("Munseo", options, Box::new(|cc| Ok(Box::new(App::new(cc, initial)))))
 }
 
 struct Job {

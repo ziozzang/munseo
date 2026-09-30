@@ -12,7 +12,7 @@ use lopdf::{dictionary, Document, Object, ObjectId, Stream, StringFormat};
 
 use crate::icc;
 
-const PRODUCER: &str = concat!("hwp2pdf ", env!("CARGO_PKG_VERSION"), " (rhwp)");
+const PRODUCER: &str = concat!("Munseo ", env!("CARGO_PKG_VERSION"), " (rhwp)");
 
 pub fn to_pdfa2u(pdf: &[u8], title: &str) -> Result<Vec<u8>, String> {
     let mut doc = Document::load_mem(pdf).map_err(|e| format!("PDF 읽기 실패: {e}"))?;
