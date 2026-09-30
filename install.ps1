@@ -36,6 +36,28 @@ if (-not $expected -or $actual -ne $expected) { Remove-Item $tmp; throw "체크�
 Move-Item -Force $tmp $exe
 Unblock-File $exe
 
+# "연결 프로그램" 목록과 우클릭 메뉴에 등록한다 (현재 사용자, 관리자 권한 불필요).
+# 기본 앱은 바꾸지 않으므로 한컴오피스 등으로 여는 동작은 그대로다.
+$cmd = "`"$exe`" --gui `"%1`""
+$classes = 'HKCU:\Software\Classes'
+function Set-Key($path, $values) {
+    New-Item -Path $path -Force | Out-Null
+    foreach ($k in $values.Keys) { Set-ItemProperty -Path $path -Name $k -Value $values[$k] }
+}
+Set-Key "$classes\HWP2PDF.Document" @{ '(default)' = '한글 문서 (HWP2PDF)' }
+Set-Key "$classes\HWP2PDF.Document\DefaultIcon" @{ '(default)' = "`"$exe`",0" }
+Set-Key "$classes\HWP2PDF.Document\shell\open\command" @{ '(default)' = $cmd }
+Set-Key "$classes\Applications\hwp2pdf.exe" @{ 'FriendlyAppName' = 'HWP2PDF' }
+Set-Key "$classes\Applications\hwp2pdf.exe\shell\open\command" @{ '(default)' = $cmd }
+foreach ($ext in '.hwp', '.hwpx') {
+    New-Item -Path "$classes\$ext\OpenWithProgids" -Force | Out-Null
+    New-ItemProperty -Path "$classes\$ext\OpenWithProgids" -Name 'HWP2PDF.Document' -Value '' -PropertyType String -Force | Out-Null
+    New-Item -Path "$classes\Applications\hwp2pdf.exe\SupportedTypes" -Force | Out-Null
+    New-ItemProperty -Path "$classes\Applications\hwp2pdf.exe\SupportedTypes" -Name $ext -Value '' -PropertyType String -Force | Out-Null
+    Set-Key "$classes\SystemFileAssociations\$ext\shell\HWP2PDF" @{ '(default)' = 'HWP2PDF로 변환'; 'Icon' = "`"$exe`",0" }
+    Set-Key "$classes\SystemFileAssociations\$ext\shell\HWP2PDF\command" @{ '(default)' = $cmd }
+}
+
 $shell = New-Object -ComObject WScript.Shell
 $lnk = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Programs')) 'HWP2PDF.lnk'))
 $lnk.TargetPath = $exe

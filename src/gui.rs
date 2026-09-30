@@ -5,13 +5,15 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
 use eframe::egui;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::batch::{self, Outcome};
 use crate::convert::OutputFormat;
 use crate::fonts;
 use crate::update::{self, Release};
 
-pub fn run() -> eframe::Result<()> {
+/// `initial`: 실행할 때 넘겨받은 파일 (Windows "연결 프로그램"·우클릭 메뉴의 `--gui` 인자)
+pub fn run(initial: Vec<PathBuf>) -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("HWP2PDF")
@@ -24,7 +26,9 @@ pub fn run() -> eframe::Result<()> {
             ),
         ..Default::default()
     };
-    eframe::run_native("HWP2PDF", options, Box::new(|cc| Ok(Box::new(App::new(cc)))))
+    #[cfg(target_os = "macos")]
+    crate::open_files::install();
+    eframe::run_native("HWP2PDF", options, Box::new(|cc| Ok(Box::new(App::new(cc, initial)))))
 }
 
 struct Job {
@@ -97,8 +101,10 @@ const KEY_FORMAT: &str = "format";
 const KEY_DELETE: &str = "delete_original";
 
 impl App {
-    fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>, initial: Vec<PathBuf>) -> Self {
         install_korean_font(&cc.egui_ctx);
+        #[cfg(target_os = "macos")]
+        crate::open_files::set_context(&cc.egui_ctx);
 
         let (msg_tx, msg_rx) = mpsc::channel::<Msg>();
         let (jobs, job_rx) = mpsc::channel::<Job>();
@@ -162,6 +168,7 @@ impl App {
         if update::automatic_check_due() {
             app.check_update(&cc.egui_ctx, false);
         }
+        app.add_paths(&cc.egui_ctx, initial);
         app
     }
 
@@ -354,6 +361,8 @@ impl eframe::App for App {
             i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect()
         });
         self.add_paths(ctx, dropped);
+        #[cfg(target_os = "macos")]
+        self.add_paths(ctx, crate::open_files::take());
         let hovering = ctx.input(|i| !i.raw.hovered_files.is_empty());
         if self.quit_for_update {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -499,19 +508,20 @@ fn clear_finished(rows: &mut Vec<Row>) {
 }
 
 fn row_ui(ui: &mut egui::Ui, row: &Row) {
-    let name = row.input.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = row.input.file_name().map(|n| display(&n.to_string_lossy())).unwrap_or_default();
+    let full = display(&row.input.display().to_string());
     ui.horizontal(|ui| {
         match &row.status {
             Status::Queued => {
                 ui.label("⏳");
-                ui.label(&name).on_hover_text(row.input.display().to_string());
+                ui.label(&name).on_hover_text(&full);
                 ui.weak("대기");
             }
             Status::Running { progress, stage, started } => {
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| {
                         ui.spinner();
-                        ui.label(&name).on_hover_text(row.input.display().to_string());
+                        ui.label(&name).on_hover_text(&full);
                         ui.weak(format!("{:.0}초", started.elapsed().as_secs_f32()));
                     });
                     ui.add(
@@ -526,10 +536,10 @@ fn row_ui(ui: &mut egui::Ui, row: &Row) {
                     ui.colored_label(egui::Color32::from_rgb(40, 160, 70), "✔");
                 } else {
                     ui.colored_label(egui::Color32::from_rgb(220, 160, 30), "⚠")
-                        .on_hover_text(warnings.join("\n"));
+                        .on_hover_text(display(&warnings.join("\n")));
                 }
-                ui.label(&name).on_hover_text(row.input.display().to_string());
-                let out = output.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                ui.label(&name).on_hover_text(&full);
+                let out = output.file_name().map(|n| display(&n.to_string_lossy())).unwrap_or_default();
                 match row.elapsed {
                     Some(t) => ui.weak(format!("{out} · {pages}쪽 · {:.1}초", t.as_secs_f32())),
                     None => ui.weak(format!("{out} · {pages}쪽")),
@@ -538,7 +548,7 @@ fn row_ui(ui: &mut egui::Ui, row: &Row) {
                     ui.weak("· 원본 삭제됨");
                 }
                 for w in warnings {
-                    ui.colored_label(egui::Color32::from_rgb(220, 160, 30), w);
+                    ui.colored_label(egui::Color32::from_rgb(220, 160, 30), display(w));
                 }
                 if ui.small_button("보기").on_hover_text("Finder/탐색기에서 보기").clicked() {
                     reveal(output);
@@ -546,11 +556,17 @@ fn row_ui(ui: &mut egui::Ui, row: &Row) {
             }
             Status::Done(Outcome::Failed(err)) => {
                 ui.colored_label(egui::Color32::from_rgb(210, 60, 60), "✖");
-                ui.label(&name).on_hover_text(row.input.display().to_string());
-                ui.colored_label(egui::Color32::from_rgb(210, 60, 60), err);
+                ui.label(&name).on_hover_text(&full);
+                ui.colored_label(egui::Color32::from_rgb(210, 60, 60), display(err));
             }
         }
     });
+}
+
+/// 화면 표시용 NFC 정규화. macOS 파일 이름은 한글이 자모로 풀린 NFD 인 경우가 많은데,
+/// egui 는 자모를 음절로 합쳐 그리지 못하고 내장 폰트에도 조합용 자모가 없어 네모로 보인다.
+fn display(s: &str) -> String {
+    s.nfc().collect()
 }
 
 fn reveal(path: &Path) {

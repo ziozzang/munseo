@@ -10,6 +10,8 @@ mod gui;
 mod icc;
 mod latex;
 mod omml;
+#[cfg(target_os = "macos")]
+mod open_files;
 mod pdfa;
 mod update;
 
@@ -22,8 +24,14 @@ fn main() -> ExitCode {
     // Finder 가 붙이는 -psn_ 인자는 무시한다.
     let args: Vec<String> = std::env::args().skip(1).filter(|a| !a.starts_with("-psn_")).collect();
     update::cleanup_previous();
-    if args.is_empty() {
-        return match gui::run() {
+    // `--gui <파일>...`: 창을 열고 파일을 바로 변환 목록에 넣는다 (Windows 연결 프로그램·우클릭 메뉴용).
+    let gui_files = match args.first().map(String::as_str) {
+        None => Some(Vec::new()),
+        Some("--gui") => Some(args[1..].iter().map(PathBuf::from).collect()),
+        Some(_) => None,
+    };
+    if let Some(files) = gui_files {
+        return match gui::run(files) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("GUI 실행 실패: {e}");
@@ -43,6 +51,7 @@ fn print_usage() {
     eprintln!(
         "사용법: hwp2pdf [--format pdfa|pdf|docx|md|txt|html] [--delete-original] <파일|폴더>...\n\
          \x20      hwp2pdf update [--check]   GitHub 릴리스로 업데이트 (--check: 확인만)\n\
+         \x20      hwp2pdf --gui <파일>...    창을 열고 파일을 목록에 넣음\n\
          인자 없이 실행하면 드래그앤드롭 창이 열립니다.\n\
          --format            출력 포맷 (기본값: pdfa = PDF/A-2u)\n\
          --delete-original   변환에 성공한 원본 HWP 를 휴지통으로 옮김"

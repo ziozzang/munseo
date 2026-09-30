@@ -32,5 +32,7 @@ mkdir -p "$DEST" 2>/dev/null || $SUDO mkdir -p "$DEST"
 $SUDO rm -rf "$DEST/HWP2PDF.app"
 $SUDO ditto "$tmp/x/HWP2PDF.app" "$DEST/HWP2PDF.app"
 $SUDO xattr -dr com.apple.quarantine "$DEST/HWP2PDF.app" 2>/dev/null || true
+# Finder "다음으로 열기" 목록에 바로 나오도록 LaunchServices 에 등록한다.
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST/HWP2PDF.app" 2>/dev/null || true
 
 echo "✓ $DEST/HWP2PDF.app ($tag) — 이후 업데이트는 앱이 알아서 합니다."
