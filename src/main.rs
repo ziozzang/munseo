@@ -11,6 +11,7 @@ mod icc;
 mod latex;
 mod omml;
 mod pdfa;
+mod update;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -20,6 +21,7 @@ use convert::OutputFormat;
 fn main() -> ExitCode {
     // Finder 가 붙이는 -psn_ 인자는 무시한다.
     let args: Vec<String> = std::env::args().skip(1).filter(|a| !a.starts_with("-psn_")).collect();
+    update::cleanup_previous();
     if args.is_empty() {
         return match gui::run() {
             Ok(()) => ExitCode::SUCCESS,
@@ -30,12 +32,17 @@ fn main() -> ExitCode {
         };
     }
     attach_console();
+    // `update` 라는 이름의 파일/폴더가 있으면 변환 대상으로 본다.
+    if args[0] == "update" && !std::path::Path::new("update").exists() {
+        return update::run_cli(args.iter().any(|a| a == "--check" || a == "-c"));
+    }
     run_cli(&args)
 }
 
 fn print_usage() {
     eprintln!(
         "사용법: hwp2pdf [--format pdfa|pdf|docx|md|txt|html] [--delete-original] <파일|폴더>...\n\
+         \x20      hwp2pdf update [--check]   GitHub 릴리스로 업데이트 (--check: 확인만)\n\
          인자 없이 실행하면 드래그앤드롭 창이 열립니다.\n\
          --format            출력 포맷 (기본값: pdfa = PDF/A-2u)\n\
          --delete-original   변환에 성공한 원본 HWP 를 휴지통으로 옮김"
@@ -51,6 +58,10 @@ fn run_cli(args: &[String]) -> ExitCode {
         match arg.as_str() {
             "-h" | "--help" => {
                 print_usage();
+                return ExitCode::SUCCESS;
+            }
+            "-V" | "--version" => {
+                println!("hwp2pdf {}", update::CURRENT_VERSION);
                 return ExitCode::SUCCESS;
             }
             "-f" | "--format" => {

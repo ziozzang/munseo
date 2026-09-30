@@ -9,6 +9,7 @@ use eframe::egui;
 use crate::batch::{self, Outcome};
 use crate::convert::OutputFormat;
 use crate::fonts;
+use crate::update::{self, Release};
 
 pub fn run() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -40,6 +41,19 @@ enum Msg {
     /// (작업 id, 0~1, 지금 하는 일)
     Progress(usize, f32, String),
     Finished(usize, Outcome),
+    /// 업데이트 확인 결과 (manual: 사용자가 누른 확인인지)
+    UpdateChecked { result: Result<Release, String>, manual: bool },
+    UpdateProgress(f32, String),
+    UpdateFailed(String),
+    /// 교체 준비 완료 — 앱을 끝내면 스크립트가 바꾸고 다시 연다
+    UpdateReady,
+}
+
+enum UpdateUi {
+    None,
+    Available(Release),
+    Installing { progress: f32, stage: String },
+    Error(String),
 }
 
 enum Status {
@@ -60,6 +74,9 @@ struct App {
     delete_original: bool,
     rows: Vec<Row>,
     notice: Option<String>,
+    update: UpdateUi,
+    checking_update: bool,
+    quit_for_update: bool,
     jobs: Sender<Job>,
     msg_tx: Sender<Msg>,
     msg_rx: Receiver<Msg>,
@@ -130,14 +147,97 @@ impl App {
             })
             .unwrap_or((OutputFormat::PdfA, false));
 
-        Self {
+        let mut app = Self {
             format,
             delete_original,
             rows: Vec::new(),
             notice: None,
+            update: UpdateUi::None,
+            checking_update: false,
+            quit_for_update: false,
             jobs,
             msg_tx,
             msg_rx,
+        };
+        if update::automatic_check_due() {
+            app.check_update(&cc.egui_ctx, false);
+        }
+        app
+    }
+
+    fn check_update(&mut self, ctx: &egui::Context, manual: bool) {
+        if self.checking_update {
+            return;
+        }
+        self.checking_update = true;
+        let (tx, ctx) = (self.msg_tx.clone(), ctx.clone());
+        std::thread::spawn(move || {
+            let result = update::fetch_latest();
+            if let Ok(release) = &result {
+                update::record_check(release);
+            }
+            let _ = tx.send(Msg::UpdateChecked { result, manual });
+            ctx.request_repaint();
+        });
+    }
+
+    fn install_update(&mut self, ctx: &egui::Context, release: Release) {
+        self.update = UpdateUi::Installing { progress: 0.0, stage: "준비 중".into() };
+        let (tx, ctx) = (self.msg_tx.clone(), ctx.clone());
+        std::thread::spawn(move || {
+            let report = |p: f32, stage: String| {
+                let _ = tx.send(Msg::UpdateProgress(p, stage));
+                ctx.request_repaint();
+            };
+            let msg = match update::install(&release, true, &report) {
+                Ok(()) => Msg::UpdateReady,
+                Err(e) => Msg::UpdateFailed(e),
+            };
+            let _ = tx.send(msg);
+            ctx.request_repaint();
+        });
+    }
+
+    fn update_banner(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, busy: bool) {
+        let mut action: Option<UpdateAction> = None;
+        match &self.update {
+            UpdateUi::None => return,
+            UpdateUi::Available(release) => {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(egui::RichText::new(format!("새 버전 {} 이 있습니다", release.version())).strong())
+                        .on_hover_text(if release.notes().is_empty() { "릴리스 노트 없음" } else { release.notes() });
+                    ui.weak(format!("(현재 {})", update::CURRENT_VERSION));
+                    let install = ui
+                        .add_enabled(!busy, egui::Button::new("업데이트 후 다시 시작"))
+                        .on_disabled_hover_text("변환이 모두 끝난 뒤 업데이트할 수 있습니다.");
+                    if install.clicked() {
+                        action = Some(UpdateAction::Install(release.clone()));
+                    }
+                    if ui.button("나중에").clicked() {
+                        action = Some(UpdateAction::Dismiss);
+                    }
+                    if ui.button("이 버전 건너뛰기").clicked() {
+                        update::skip(release);
+                        action = Some(UpdateAction::Dismiss);
+                    }
+                });
+            }
+            UpdateUi::Installing { progress, stage } => {
+                ui.add(egui::ProgressBar::new(*progress).text(format!("업데이트 · {stage}")));
+            }
+            UpdateUi::Error(err) => {
+                ui.horizontal_wrapped(|ui| {
+                    ui.colored_label(egui::Color32::from_rgb(210, 60, 60), format!("업데이트 실패: {err}"));
+                    if ui.small_button("닫기").clicked() {
+                        action = Some(UpdateAction::Dismiss);
+                    }
+                });
+            }
+        }
+        match action {
+            Some(UpdateAction::Install(release)) => self.install_update(ctx, release),
+            Some(UpdateAction::Dismiss) => self.update = UpdateUi::None,
+            None => {}
         }
     }
 
@@ -203,6 +303,27 @@ impl App {
                         row.status = Status::Done(outcome);
                     }
                 }
+                Msg::UpdateChecked { result, manual } => {
+                    self.checking_update = false;
+                    match result {
+                        Ok(release) if release.is_newer() && (manual || !update::is_skipped(&release)) => {
+                            self.update = UpdateUi::Available(release);
+                        }
+                        Ok(release) if manual => {
+                            self.notice = Some(format!("최신 버전을 사용 중입니다 ({}, 배포 {}).", update::CURRENT_VERSION, release.version()));
+                        }
+                        Err(e) if manual => self.update = UpdateUi::Error(e),
+                        _ => {}
+                    }
+                }
+                Msg::UpdateProgress(p, text) => {
+                    self.update = UpdateUi::Installing { progress: p, stage: text };
+                }
+                Msg::UpdateFailed(e) => self.update = UpdateUi::Error(e),
+                Msg::UpdateReady => {
+                    self.update = UpdateUi::Installing { progress: 1.0, stage: "다시 시작하는 중".into() };
+                    self.quit_for_update = true;
+                }
             }
         }
     }
@@ -234,6 +355,20 @@ impl eframe::App for App {
         });
         self.add_paths(ctx, dropped);
         let hovering = ctx.input(|i| !i.raw.hovered_files.is_empty());
+        if self.quit_for_update {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+        let busy = {
+            let c = self.counts();
+            c.running + c.queued > 0
+        };
+        if !matches!(self.update, UpdateUi::None) {
+            egui::Panel::top("update").show(ui, |ui| {
+                ui.add_space(6.0);
+                self.update_banner(ui, ctx, busy);
+                ui.add_space(6.0);
+            });
+        }
 
         egui::Panel::top("options").show(ui, |ui| {
             ui.add_space(8.0);
@@ -247,6 +382,13 @@ impl eframe::App for App {
                             ui.selectable_value(&mut self.format, f, f.label());
                         }
                     });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let label = if self.checking_update { "확인 중…" } else { "업데이트 확인" };
+                    if ui.add_enabled(!self.checking_update, egui::Button::new(label).small()).clicked() {
+                        self.check_update(ctx, true);
+                    }
+                    ui.weak(format!("v{}", update::CURRENT_VERSION));
+                });
             });
             ui.add_space(4.0);
             ui.checkbox(&mut self.delete_original, "변환에 성공하면 원본 HWP 삭제 (휴지통으로 이동)");
@@ -342,6 +484,11 @@ impl eframe::App for App {
         eframe::set_value(storage, KEY_FORMAT, &self.format);
         eframe::set_value(storage, KEY_DELETE, &self.delete_original);
     }
+}
+
+enum UpdateAction {
+    Install(Release),
+    Dismiss,
 }
 
 /// 작업 id 가 곧 행 번호이므로, 모든 작업이 끝났을 때만 목록을 비운다.

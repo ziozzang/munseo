@@ -3,6 +3,30 @@
 HWP/HWPX 문서를 끌어다 놓으면 **PDF/A-2u**(텍스트 보존), PDF, Word(DOCX), Markdown, Text, HTML로 변환하는 macOS·Windows 네이티브 앱입니다.
 문서 해석과 렌더링은 [rhwp](https://github.com/edwardkim/rhwp)(Rust)를 라이브러리로 직접 링크하고, UI는 egui/eframe을 씁니다.
 
+## 설치
+
+**macOS** (터미널에 한 줄):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ziozzang/munseo/main/install.sh | sh
+```
+
+**Windows** (PowerShell에 한 줄):
+
+```powershell
+irm https://raw.githubusercontent.com/ziozzang/munseo/main/install.ps1 | iex
+```
+
+- 두 스크립트 모두 최신 릴리스를 받아 `SHA256SUMS`로 검증한 뒤 설치합니다.
+  - macOS: `/Applications/HWP2PDF.app`
+  - Windows: `%LOCALAPPDATA%\Programs\HWP2PDF`, 시작 메뉴 바로가기 포함
+- 앱은 Apple 공증이나 Windows 코드 서명 없이 배포됩니다.
+  - 브라우저로 받으면 macOS가 "손상되었거나 확인되지 않은 개발자"라며 막고, Windows는 SmartScreen 경고를 띄웁니다.
+  - 위의 한 줄 설치로 받으면 이 표시가 붙지 않아 바로 열립니다.
+- 브라우저로 [Releases](https://github.com/ziozzang/munseo/releases)에서 받았다면, 처음 한 번만 다음 중 하나를 하세요.
+  - macOS: `xattr -dr com.apple.quarantine /Applications/HWP2PDF.app`
+  - Windows: 경고 창에서 "추가 정보 → 실행"을 누릅니다.
+
 ## 기능
 
 - **드래그앤드롭**: 파일을 놓으면 그 파일을, 폴더를 놓으면 하위 폴더까지 모든 `.hwp`/`.hwpx`를 변환합니다.
@@ -103,8 +127,41 @@ Windows에서 같은 명령으로 빌드합니다(`scripts/fetch-rhwp.sh`는 Git
 
 ### GitHub Actions
 
-`.github/workflows/build.yml`이 macOS(arm64)와 Windows(x64)에서 테스트·빌드·변환 스모크 테스트를 하고
-`HWP2PDF-macos.zip`, `hwp2pdf.exe`를 산출물로 올립니다.
+`.github/workflows/build.yml`이 푸시할 때마다 macOS와 Windows(x64)에서 테스트·빌드·변환 스모크 테스트를 합니다.
+macOS는 arm64 + x86_64 유니버설로 빌드합니다. 결과물은 다음 이름으로 올립니다.
+
+- `HWP2PDF_<버전>_macos_universal.zip`
+- `HWP2PDF_<버전>_windows_x86_64.exe`
+
+`v*` 태그를 푸시하면 이 두 파일과 `SHA256SUMS`로 GitHub 릴리스를 만듭니다.
+
+## 자동 업데이트
+
+[sugyeol](https://github.com/ziozzang/sugyeol)과 같은 방식으로 GitHub Releases를 씁니다.
+
+- **확인 시점:** 앱을 켤 때 하루 한 번 `api.github.com/repos/ziozzang/munseo/releases/latest`를 확인합니다.
+  - 옵션 줄 오른쪽의 **업데이트 확인**으로 직접 확인할 수도 있습니다.
+  - 자동 확인을 끄려면 환경 변수 `HWP2PDF_NO_UPDATE_CHECK`를 설정하세요.
+- **알림:** 새 버전이 있으면 창 위에 알림이 뜹니다(업데이트 후 다시 시작 / 나중에 / 이 버전 건너뛰기).
+  - 묻지 않고 설치하지는 않습니다.
+  - 변환이 진행 중일 때는 업데이트 버튼이 꺼집니다.
+- **설치 순서:**
+  1. 플랫폼용 파일을 내려받으면서 SHA-256을 계산하고, 릴리스의 `SHA256SUMS`와 비교합니다.
+  2. 앱을 교체한 뒤 다시 실행합니다.
+     - macOS: `.app` 번들을 통째로 바꿉니다. 받은 번들의 번들 ID와 버전도 확인합니다.
+     - Windows: 실행 중인 exe를 `.old`로 옮기고 새 exe를 그 자리에 둡니다. `.old` 파일은 다음 실행 때 지웁니다.
+- **명령줄:**
+  - `hwp2pdf update --check`: 새 버전이 있는지 확인만 합니다.
+  - `hwp2pdf update`: 새 버전을 설치합니다. 창을 띄우지 않고 교체만 합니다.
+  - `hwp2pdf --version`: 현재 버전을 보여 줍니다.
+- 앱이 있는 폴더에 쓸 권한이 있어야 합니다.
+
+## 릴리스 절차
+
+1. `Cargo.toml`의 `version`과 `RELEASE_NOTES.md`를 고칩니다.
+2. `cargo build`로 `Cargo.lock`을 갱신한 뒤 커밋합니다.
+3. `./scripts/release.sh`를 실행합니다. `v<버전>` 태그를 푸시하고, Actions가 릴리스를 만듭니다.
+   - 태그와 `Cargo.toml` 버전이 다르면 릴리스 단계가 실패합니다.
 
 ## 명령줄 사용
 
@@ -136,11 +193,15 @@ src/omml.rs      수식 → Word 수식(OMML)
 src/pdfa.rs      PDF/A-2u 후처리 (XMP, OutputIntent, /ID, 금지 키 제거)
 src/icc.rs       sRGB ICC v2 프로파일 생성
 src/fonts.rs     내장 Noto Sans KR
+src/update.rs    GitHub Releases 자동 업데이트
 assets/icon/     앱 아이콘 (png, icns, ico)
 build.rs         Windows 실행 파일 아이콘
 patches/         rhwp 패치 (공백 글리프, 텍스트 추출 시 수식 표식)
+install.sh       macOS 한 줄 설치 스크립트
+install.ps1      Windows 한 줄 설치 스크립트
+scripts/release.sh  버전 태그 푸시 (릴리스는 Actions 가 만듦)
 ```
 
 ## 라이선스
 
-MIT. 내장 폰트 Noto Sans KR은 SIL Open Font License 1.1(`assets/fonts/NotoSansKR-OFL.txt`)을 따릅니다.
+MIT (`LICENSE`). rhwp도 MIT입니다. 내장 폰트 Noto Sans KR은 SIL Open Font License 1.1(`assets/fonts/NotoSansKR-OFL.txt`)을 따릅니다.
