@@ -16,7 +16,7 @@ use crate::update::{self, Release};
 pub fn run(initial: Vec<PathBuf>) -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("HWP2PDF")
+            .with_title("Munseo")
             .with_inner_size([640.0, 560.0])
             .with_min_inner_size([480.0, 400.0])
             .with_drag_and_drop(true)
@@ -28,6 +28,7 @@ pub fn run(initial: Vec<PathBuf>) -> eframe::Result<()> {
     };
     #[cfg(target_os = "macos")]
     crate::open_files::install();
+    // 앱 이름은 설정 저장 위치에도 쓰이므로 창 제목과 달리 "HWP2PDF" 를 유지한다.
     eframe::run_native("HWP2PDF", options, Box::new(|cc| Ok(Box::new(App::new(cc, initial)))))
 }
 
